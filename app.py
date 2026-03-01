@@ -75,6 +75,12 @@ with st.sidebar:
         "3. Download the styled Excel report"
     )
     st.markdown("---")
+    force_refresh = st.toggle(
+        "Force refresh",
+        value=False,
+        help="Ignore cached results and re-fetch from the Qwen API.",
+    )
+    st.markdown("---")
     if st.button("Logout", use_container_width=True):
         st.session_state.clear()
         st.rerun()
@@ -126,6 +132,11 @@ def _process_bank(name: str, url: str, api_key: str) -> dict:
     return {"name": name, "metrics": metrics, "pages": relevant_indices, "error": None}
 
 
+@st.cache_data(ttl=86400, show_spinner=False)   # cache for 24 hours, keyed by url
+def _cached_process_bank(name: str, url: str, api_key: str) -> dict:
+    return _process_bank(name, url, api_key)
+
+
 # ── Compare button ───────────────────────────────────────────────────────────
 if st.button("Compare Banks", type="primary", use_container_width=True,
              disabled=st.session_state.processing):
@@ -146,14 +157,19 @@ if st.button("Compare Banks", type="primary", use_container_width=True,
         st.stop()
 
     # Store inputs in session state and rerun to render the disabled button
-    st.session_state.processing = True
-    st.session_state.pending_banks = banks
+    st.session_state.processing     = True
+    st.session_state.pending_banks  = banks
     st.session_state.pending_api_key = api_key
+    st.session_state.pending_force_refresh = force_refresh
     st.rerun()
 
 if st.session_state.processing:
-    banks   = st.session_state.pending_banks
-    api_key = st.session_state.pending_api_key
+    banks         = st.session_state.pending_banks
+    api_key       = st.session_state.pending_api_key
+    force_refresh = st.session_state.get("pending_force_refresh", False)
+
+    if force_refresh:
+        _cached_process_bank.clear()
 
     # ── Run all banks in parallel ────────────────────────────────────────────
     progress = st.progress(0, text=f"Processing {len(banks)} banks in parallel...")
@@ -163,7 +179,7 @@ if st.session_state.processing:
 
     with ThreadPoolExecutor(max_workers=len(banks)) as executor:
         futures = {
-            executor.submit(_process_bank, name, url, api_key): name
+            executor.submit(_cached_process_bank, name, url, api_key): name
             for name, url in banks
         }
         for future in as_completed(futures):
@@ -216,7 +232,7 @@ if "result_df" in st.session_state:
 
     st.markdown("---")
     st.subheader("Peer Comparison Table")
-    st.dataframe(st.session_state.result_df, width=None)
+    st.dataframe(st.session_state.result_df, use_container_width=True)
 
     if st.session_state.bullets:
         st.subheader("Key Takeaways")
