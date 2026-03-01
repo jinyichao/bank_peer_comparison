@@ -18,7 +18,31 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("🏦 Singapore Bank Peer Comparison")
+# ── Login ────────────────────────────────────────────────────────────────────
+_APP_USER = os.getenv("APP_USERNAME", "")
+_APP_PASS = os.getenv("APP_PASSWORD", "")
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    st.title("🏦 Singapore Bank Peer Comparison -- LEAD28 Transformers")
+    st.markdown("---")
+    col_l, col_m, col_r = st.columns([1, 1, 1])
+    with col_m:
+        st.subheader("Login")
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            if st.form_submit_button("Login", use_container_width=True):
+                if username == _APP_USER and password == _APP_PASS:
+                    st.session_state.logged_in = True
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password.")
+    st.stop()
+
+st.title("🏦 Singapore Bank Peer Comparison -- LEAD28 Transformers")
 st.caption("FY2025 Financial Results")
 
 # ── Default values ───────────────────────────────────────────────────────────
@@ -42,6 +66,10 @@ with st.sidebar:
         "2. Click **Compare Banks**\n"
         "3. Download the styled Excel report"
     )
+    st.markdown("---")
+    if st.button("Logout", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
 
 # ── Bank URL inputs ──────────────────────────────────────────────────────────
 col1, col2, col3 = st.columns(3)
@@ -145,28 +173,14 @@ if st.session_state.processing:
 
     progress.empty()
 
-    # Show any per-bank errors
-    for name, msg in errors.items():
-        st.error(f"{name}: {msg}")
-
-    # Show which pages were selected for each bank
-    for name, result in bank_results.items():
-        page_labels = ", ".join(str(p + 1) for p in result["pages"])
-        st.info(f"{name} — relevant pages: {page_labels} ({len(result['pages'])} pages)")
-
     if not bank_results:
+        st.session_state.processing = False
         st.error("No data could be extracted. Check the URLs and your API key.")
-        st.stop()
+        st.rerun()
 
-    # ── Build and display table ──────────────────────────────────────────────
     metrics_by_bank = {name: r["metrics"] for name, r in bank_results.items()}
     df = build_dataframe(metrics_by_bank)
 
-    st.markdown("---")
-    st.subheader("Peer Comparison Table")
-    st.dataframe(df, use_container_width=True)
-
-    # ── AI summary ───────────────────────────────────────────────────────────
     with st.spinner("Generating summary..."):
         try:
             bullets = generate_summary(df, api_key)
@@ -174,20 +188,37 @@ if st.session_state.processing:
             st.warning(f"Could not generate summary: {e}")
             bullets = []
 
-    if bullets:
+    # Store results in session state, clear processing flag, rerun to re-enable button
+    st.session_state.errors      = errors
+    st.session_state.page_info   = {n: r["pages"] for n, r in bank_results.items()}
+    st.session_state.result_df   = df
+    st.session_state.bullets     = bullets
+    st.session_state.excel_bytes = to_excel_bytes(df, bullets)
+    st.session_state.processing  = False
+    st.rerun()
+
+# ── Display results (persisted in session state) ─────────────────────────────
+if "result_df" in st.session_state:
+    for name, msg in st.session_state.errors.items():
+        st.error(f"{name}: {msg}")
+
+    for name, pages in st.session_state.page_info.items():
+        page_labels = ", ".join(str(p + 1) for p in pages)
+        st.info(f"{name} — relevant pages: {page_labels} ({len(pages)} pages)")
+
+    st.markdown("---")
+    st.subheader("Peer Comparison Table")
+    st.dataframe(st.session_state.result_df, width=None)
+
+    if st.session_state.bullets:
         st.subheader("Key Takeaways")
-        for bullet in bullets:
+        for bullet in st.session_state.bullets:
             st.markdown(f"- {bullet}")
 
-    # ── Excel download ───────────────────────────────────────────────────────
-    excel_bytes = to_excel_bytes(df, bullets)
     st.download_button(
         label="Download Excel",
-        data=excel_bytes,
+        data=st.session_state.excel_bytes,
         file_name="bank_comparison_fy2025.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True,
     )
-
-    # Re-enable the button now that processing is complete
-    st.session_state.processing = False
