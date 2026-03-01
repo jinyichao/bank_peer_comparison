@@ -18,6 +18,14 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown("""
+<style>
+#MainMenu {visibility: hidden;}
+header [data-testid="stToolbar"] {visibility: hidden;}
+footer {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
+
 # ── Login ────────────────────────────────────────────────────────────────────
 _APP_USER = os.getenv("APP_USERNAME", "")
 _APP_PASS = os.getenv("APP_PASSWORD", "")
