@@ -28,6 +28,7 @@ def generate_summary(df: pd.DataFrame, api_key: str) -> list[str]:
         model=QWEN_MODEL,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=512,
+        extra_body={"enable_thinking": False},
     )
 
     raw = response.choices[0].message.content.strip()
@@ -73,6 +74,7 @@ def _scan_batch(client: OpenAI, batch_images: list[str], batch_start: int) -> li
         model=QWEN_MODEL_SCAN,
         messages=[{"role": "user", "content": content}],
         max_tokens=128,
+        extra_body={"enable_thinking": False},
     )
 
     raw = response.choices[0].message.content.strip()
@@ -139,6 +141,7 @@ def extract_metrics(detail_images: list[str], bank_name: str, api_key: str) -> d
             {"role": "user",   "content": content},
         ],
         max_tokens=1024,
+        extra_body={"enable_thinking": False},
     )
 
     raw = response.choices[0].message.content.strip()
