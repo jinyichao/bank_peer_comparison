@@ -24,7 +24,7 @@ METRICS = [
 # For users outside mainland China (e.g. Singapore), use the intl endpoint:
 #   DASHSCOPE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 QWEN_MODEL_SCAN = "qwen3.5-flash"   # Pass 1: fast page identification
-QWEN_MODEL = "qwen3.5-plus"         # Pass 2: accurate metric extraction
+QWEN_MODEL = "qwen3.5-plus-2026-02-15"  # Pass 2: accurate metric extraction
 DASHSCOPE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
 # Pass 1 — page scan
@@ -37,6 +37,48 @@ DETAIL_ZOOM = 1.5       # High-res re-render of selected pages only
 MAX_DETAIL_PAGES = 15   # Safety cap in case pass 1 selects too many pages
 
 METRIC_KEYS = [m["key"] for m in METRICS]
+
+# ── Legal document extraction ─────────────────────────────────────────────────
+LEGAL_SCAN_ZOOM    = 0.5   # Low-res thumbnails for page scan
+LEGAL_DETAIL_ZOOM  = 2.0   # High-res render for extraction
+LEGAL_SCAN_PAGES   = 60    # Max pages to scan
+LEGAL_SCAN_BATCH   = 15    # Pages per batch
+
+# ── Pass 1 prompt — find relevant pages ───────────────────────────────────────
+LEGAL_SCAN_PROMPT = """You are reviewing a legal document.
+
+Each page is labelled [Page N] above its image.
+
+Identify every page that contains the "MULTICURRENCY – CROSS BORDER" section heading or its clauses and provisions.
+
+Return ONLY a JSON array of the relevant page numbers (integers), e.g. [21, 22].
+No prose, no explanation — only the JSON array."""
+
+# ── Pass 2 prompt — structured extraction ─────────────────────────────────────
+LEGAL_SYSTEM_PROMPT = """You are a legal document analyst specialising in financial contracts and ISDA agreements.
+
+You will receive high-resolution images of the pages containing the MULTICURRENCY – CROSS BORDER section. Extract and structure all content from that section.
+
+Return your output as a valid JSON object with the following structure:
+{
+  "section_title": "the exact section heading as it appears",
+  "parties": {"party_a": "...", "party_b": "...", "security_trustee": "..."},
+  "provisions": [
+    {"clause": "clause number or heading exactly as written in the document (e.g. '1. Specified Entity', 'Part 1')", "content": "full clause text"}
+  ],
+  "elections": [
+    {"item": "election name", "value": "elected value or N/A"}
+  ],
+  "other": "any other relevant content not captured above"
+}
+
+Rules:
+- Extract ALL text from the MULTICURRENCY – CROSS BORDER section faithfully
+- Preserve clause numbers and structure
+- If a field cannot be found, use null
+- Return ONLY the JSON object — no prose, no markdown fences"""
+
+LEGAL_USER_PROMPT = "Extract all content from the MULTICURRENCY – CROSS BORDER section on these pages."
 
 # ── Pass 1 prompt ─────────────────────────────────────────────────────────────
 PAGE_SCAN_PROMPT = """You are reviewing a Singapore bank financial report.

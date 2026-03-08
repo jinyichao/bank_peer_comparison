@@ -7,6 +7,7 @@ from config import (
     QWEN_MODEL_SCAN, QWEN_MODEL, DASHSCOPE_BASE_URL, METRIC_KEYS,
     PAGE_SCAN_PROMPT, SYSTEM_PROMPT, USER_PROMPT, SUMMARY_PROMPT,
     MAX_DETAIL_PAGES, SCAN_BATCH_SIZE,
+    LEGAL_SCAN_PROMPT, LEGAL_SYSTEM_PROMPT, LEGAL_USER_PROMPT, LEGAL_SCAN_BATCH,
 )
 
 
@@ -122,6 +123,98 @@ def identify_relevant_pages(overview_images: list[str], api_key: str) -> list[in
         print("[page scan] No pages identified — using first 20 pages")
         return list(range(min(20, len(overview_images))))
     return indices
+
+
+def identify_legal_pages(overview_images: list[str], api_key: str) -> list[int]:
+    """
+    Pass 1: scan page thumbnails in batches to find pages containing the
+    MULTICURRENCY – CROSS BORDER section. Returns sorted 0-based indices.
+    Falls back to pages 20–21 (i.e. pages 21–22) if nothing found.
+    """
+    client = OpenAI(api_key=api_key, base_url=DASHSCOPE_BASE_URL)
+
+    batches = [
+        (overview_images[i: i + LEGAL_SCAN_BATCH], i)
+        for i in range(0, len(overview_images), LEGAL_SCAN_BATCH)
+    ]
+
+    all_indices: list[int] = []
+    with ThreadPoolExecutor(max_workers=len(batches)) as executor:
+        futures = {
+            executor.submit(_legal_scan_batch, client, imgs, start): start
+            for imgs, start in batches
+        }
+        for future in as_completed(futures):
+            try:
+                all_indices.extend(future.result())
+            except Exception as e:
+                print(f"[legal scan] Batch failed: {e}")
+
+    indices = sorted(set(all_indices))
+    if not indices:
+        print("[legal scan] No pages found — falling back to pages 21–22")
+        return [20, 21]
+    return indices
+
+
+def _legal_scan_batch(client: OpenAI, batch_images: list[str], batch_start: int) -> list[int]:
+    """Scan a batch of thumbnails for the MULTICURRENCY – CROSS BORDER section."""
+    content = [{"type": "text", "text": LEGAL_SCAN_PROMPT}]
+    for i, b64 in enumerate(batch_images):
+        content.append({"type": "text", "text": f"[Page {batch_start + i + 1}]"})
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{b64}"},
+        })
+
+    response = client.chat.completions.create(
+        model=QWEN_MODEL_SCAN,
+        messages=[{"role": "user", "content": content}],
+        max_tokens=128,
+        extra_body={"enable_thinking": False},
+    )
+
+    raw = response.choices[0].message.content.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+
+    try:
+        page_nums = json.loads(raw)
+        if not isinstance(page_nums, list):
+            return []
+        return [int(p) - 1 for p in page_nums if isinstance(p, (int, float))]
+    except Exception:
+        return []
+
+
+def extract_legal_content(page_images: list[str], api_key: str) -> dict:
+    """
+    Extract structured content from the MULTICURRENCY – CROSS BORDER section
+    of a legal document using the provided page images.
+    """
+    client = OpenAI(api_key=api_key, base_url=DASHSCOPE_BASE_URL)
+
+    content = _build_image_content(page_images, label_prefix="Page")
+    content.append({"type": "text", "text": LEGAL_USER_PROMPT})
+
+    response = client.chat.completions.create(
+        model=QWEN_MODEL,
+        messages=[
+            {"role": "system", "content": LEGAL_SYSTEM_PROMPT},
+            {"role": "user",   "content": content},
+        ],
+        max_tokens=2048,
+        extra_body={"enable_thinking": False},
+    )
+
+    raw = response.choices[0].message.content.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {"error": "Could not parse response", "raw": raw}
 
 
 def extract_metrics(detail_images: list[str], bank_name: str, api_key: str) -> dict:
