@@ -128,7 +128,7 @@ tab1, tab2 = st.tabs(["📄 Auto Legal Document Extraction", "🏦 Singapore Ban
 with tab1:
     st.subheader("Auto Legal Document Extraction")
     st.markdown("##### MULTICURRENCY – CROSS BORDER Extraction")
-    st.caption("Extracts the **MULTICURRENCY – CROSS BORDER** section from pages 21–22 of an ISDA Master Agreement.")
+    st.caption("Extracts the **MULTICURRENCY – CROSS BORDER** section of an ISDA Master Agreement.")
 
     legal_url = st.text_input(
         "Legal Document PDF URL",
