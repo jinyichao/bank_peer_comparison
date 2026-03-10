@@ -106,6 +106,9 @@ def _process_bank(name: str, url: str, api_key: str) -> dict:
     except Exception as e:
         return {"name": name, "error": f"Page scan failed: {e}"}
 
+    if name.upper() == "DBS" and 1 not in relevant_indices:
+        relevant_indices = sorted(set(relevant_indices) | {1})
+
     detail_images = render_pages(pdf_bytes, relevant_indices, zoom=DETAIL_ZOOM)
 
     try:
@@ -296,7 +299,8 @@ with tab2:
 
         with st.spinner("Generating summary..."):
             try:
-                bullets = generate_summary(df, api_key)
+                summary_df = df[~(df == "N/A").all(axis=1)]
+                bullets = generate_summary(summary_df, api_key)
             except Exception as e:
                 st.warning(f"Could not generate summary: {e}")
                 bullets = []
@@ -320,7 +324,9 @@ with tab2:
 
         st.markdown("---")
         st.subheader("Peer Comparison Table")
-        st.dataframe(st.session_state.result_df, use_container_width=True)
+        display_df = st.session_state.result_df
+        display_df = display_df[~(display_df == "N/A").all(axis=1)]
+        st.dataframe(display_df, use_container_width=True)
 
         if st.session_state.bullets:
             st.subheader("Key Takeaways")
