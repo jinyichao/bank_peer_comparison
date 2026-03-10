@@ -299,7 +299,7 @@ with tab2:
 
         with st.spinner("Generating summary..."):
             try:
-                summary_df = df[~(df == "N/A").all(axis=1)]
+                summary_df = df[~(df == "N/A").any(axis=1)]
                 bullets = generate_summary(summary_df, api_key)
             except Exception as e:
                 st.warning(f"Could not generate summary: {e}")
@@ -325,7 +325,7 @@ with tab2:
         st.markdown("---")
         st.subheader("Peer Comparison Table")
         display_df = st.session_state.result_df
-        display_df = display_df[~(display_df == "N/A").all(axis=1)]
+        display_df = display_df[~(display_df == "N/A").any(axis=1)]
         st.dataframe(display_df, use_container_width=True)
 
         if st.session_state.bullets:
